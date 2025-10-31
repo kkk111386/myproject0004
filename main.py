@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="대중교통 접근수단 (2018-2024) 시각화", layout="wide")
 st.title("대중교통 접근수단 (2018 - 2024) — 시도별/유형별 시각화")
 
-CSV_PATH = "/mnt/data/대중교통현황조사(2011~ )_시도별 대중교통 접근수단 (2018 ~ 2024).csv"
+CSV_PATH = "대중교통현황조사(2011~ )_시도별 대중교통 접근수단 (2018 ~ 2024).csv"
 
 @st.cache_data
 def load_data(path=CSV_PATH):
