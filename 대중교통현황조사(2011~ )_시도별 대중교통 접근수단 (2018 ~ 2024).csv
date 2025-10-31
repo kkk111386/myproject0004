@@ -1,37 +1,143 @@
-��(Annual),����,����,�¿���,������,�ý�,��Ÿ
-2023,��ü,92.8,4.4,1.7,0.9,0.3
-2023,����,91.0,5.0,2.7,0.8,0.5
-2023,�λ�,92.8,4.8,1.2,0.9,0.4
-2023,�뱸,92.7,4.8,1.8,0.7,0.1
-2023,��õ,92.9,4.2,1.7,1.1,0.2
-2023,����,94.0,3.2,1.4,1.1,0.3
-2023,����,93.7,3.4,1.7,0.9,0.3
-2023,���,92.9,4.8,1.1,0.9,0.4
-2023,����,94.1,2.7,1.2,0.8,1.2
-2023,���,92.7,4.6,1.6,0.8,0.3
-2023,����,94.2,3.9,1.1,0.7,0.2
-2023,���,94.3,3.9,1.2,0.5,0.2
-2023,�泲,94.0,4.1,1.1,0.7,0.1
-2023,����,93.7,3.8,1.6,0.8,0.2
-2023,����,94.7,3.3,1.0,0.9,0.2
-2023,���,93.9,3.9,1.2,0.9,0.2
-2023,�泲,93.8,3.7,1.2,1.1,0.2
-2023,����,93.2,4.0,1.7,0.6,0.5
-2024,��ü,83.4,8.0,1.0,4.0,3.6
-2024,����,83.5,7.9,1.2,4.2,3.2
-2024,�λ�,82.9,8.0,1.1,4.0,3.9
-2024,�뱸,83.3,8.9,0.7,4.0,3.1
-2024,��õ,83.1,8.3,1.2,3.6,3.8
-2024,����,83.9,8.9,0.8,3.1,3.3
-2024,����,83.6,7.9,0.9,4.3,3.3
-2024,���,85.4,6.8,0.7,4.0,3.2
-2024,����,82.5,7.9,1.2,3.8,4.6
-2024,���,83.3,8.1,1.0,3.9,3.7
-2024,����,84.0,8.4,1.0,4.0,2.7
-2024,���,83.0,8.7,1.1,3.8,3.5
-2024,�泲,83.2,7.5,0.8,4.2,4.3
-2024,����,83.9,7.5,1.1,3.4,4.1
-2024,����,83.1,7.4,1.1,4.2,4.4
-2024,���,83.9,7.9,1.0,4.3,3.0
-2024,�泲,83.1,8.0,0.9,4.0,4.0
-2024,����,82.4,8.3,0.7,4.2,4.4
+# /mnt/data/streamlit_app.py
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+st.set_page_config(page_title="대중교통 접근수단 (2018-2024) 시각화", layout="wide")
+st.title("대중교통 접근수단 (2018 - 2024) — 시도별/유형별 시각화")
+
+CSV_PATH = "/mnt/data/대중교통현황조사(2011~ )_시도별 대중교통 접근수단 (2018 ~ 2024).csv"
+
+@st.cache_data
+def load_data(path=CSV_PATH):
+    encodings = ["utf-8", "utf-8-sig", "cp949", "euc-kr", "latin1"]
+    # 여러 인코딩 시도
+    for enc in encodings:
+        try:
+            df = pd.read_csv(path, encoding=enc)
+            df.attrs["encoding_used"] = enc
+            return df
+        except Exception:
+            continue
+    # fallback: python engine + loose quoting
+    try:
+        df = pd.read_csv(path, engine="python", encoding="utf-8", quoting=3)
+        df.attrs["encoding_used"] = "utf-8 (python engine, quoting=3)"
+        return df
+    except Exception as e:
+        raise e
+
+# 데이터 불러오기
+try:
+    df = load_data()
+except Exception as e:
+    st.error(f"CSV 파일을 불러오지 못했습니다: {e}")
+    st.stop()
+
+st.sidebar.header("데이터 정보 / 필터")
+st.sidebar.write(f"읽은 인코딩: **{df.attrs.get('encoding_used', 'unknown')}**")
+st.write("원본 데이터 미리보기 (상위 10행)")
+st.dataframe(df.head(10))
+
+# 기본 컬럼명 추정
+year_col_guess = "년(Annual)" if "년(Annual)" in df.columns else df.columns[0]
+region_col_guess = "구분" if "구분" in df.columns else df.columns[1]
+
+# UI: 컬럼 선택
+year_col = st.sidebar.selectbox(
+    "연도(Year) 컬럼 선택",
+    options=list(df.columns),
+    index=list(df.columns).index(year_col_guess)
+)
+region_col = st.sidebar.selectbox(
+    "지역(시도) 컬럼 선택",
+    options=list(df.columns),
+    index=list(df.columns).index(region_col_guess)
+)
+
+# 교통수단 컬럼 추출
+transport_cols = [c for c in df.columns if c not in {year_col, region_col}]
+if not transport_cols:
+    st.error("교통수단으로 사용할 컬럼을 자동으로 찾지 못했습니다. CSV 구조를 확인해 주세요.")
+    st.stop()
+
+st.sidebar.write("교통수단(컬럼)")
+selected_transports = st.sidebar.multiselect(
+    "표시할 교통수단 선택",
+    options=transport_cols,
+    default=transport_cols[:3]
+)
+
+# 연도 필터
+unique_years = df[year_col].astype(str).unique().tolist()
+selected_years = st.sidebar.multiselect("표시할 연도 선택", options=unique_years, default=unique_years)
+
+# 시도 필터
+unique_regions = df[region_col].astype(str).unique().tolist()
+selected_regions = st.sidebar.multiselect("표시할 시도 선택", options=unique_regions, default=unique_regions[:6])
+
+# 데이터 복사 및 연도 문자열 변환
+df_work = df.copy()
+df_work[year_col] = df_work[year_col].astype(str)
+
+# 필터 적용
+df_work = df_work[df_work[year_col].isin(selected_years)]
+df_work = df_work[df_work[region_col].isin(selected_regions)]
+
+# long 형식 변환
+df_long = df_work.melt(
+    id_vars=[region_col, year_col],
+    value_vars=transport_cols,
+    var_name="Transport",
+    value_name="Value"
+)
+
+# 숫자 변환 함수
+def to_num(x):
+    if pd.isna(x):
+        return None
+    if isinstance(x, (int, float)):
+        return x
+    s = str(x).replace(",", "").strip()
+    try:
+        return float(s)
+    except:
+        return None
+
+df_long["Value"] = df_long["Value"].apply(to_num)
+
+# 시각화
+st.header("시도별 추이 (라인/막대 차트)")
+chart_mode = st.radio(
+    "차트 종류",
+    options=["라인 차트 (연도별)", "막대 차트 (연도별 합계)", "스택형 막대(연도별)"],
+    index=0
+)
+
+if chart_mode == "라인 차트 (연도별)":
+    if df_long["Value"].notna().sum() == 0:
+        st.warning("수치 데이터로 변환 가능한 값이 없습니다. 원시값을 확인해 주세요.")
+    else:
+        fig = px.line(
+            df_long[df_long["Transport"].isin(selected_transports)],
+            x=year_col, y="Value", color=region_col, line_dash="Transport",
+            markers=True, labels={"Value": "값", year_col: "연도"}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+elif chart_mode == "막대 차트 (연도별 합계)":
+    agg = df_long[df_long["Transport"].isin(selected_transports)].groupby([year_col]).sum(numeric_only=True).reset_index()
+    fig = px.bar(agg, x=year_col, y="Value", labels={"Value": "합계", year_col: "연도"})
+    st.plotly_chart(fig, use_container_width=True)
+
+else:  # 스택형 막대
+    stacked = df_long[df_long["Transport"].isin(selected_transports)].groupby([year_col, "Transport"])["Value"].sum().reset_index()
+    fig = px.bar(stacked, x=year_col, y="Value", color="Transport", labels={year_col:"연도", "Value":"값"})
+    st.plotly_chart(fig, use_container_width=True)
+
+# 데이터 확인
+st.header("원본 / 가공 데이터 확인")
+st.write("긴 형식 (region / year / transport / value)")
+st.dataframe(df_long.reset_index(drop=True))
+
+st.caption("참고: CSV 구조에 맞춰 자동 추정합니다. 필요시 컬럼명·숫자 변환 규칙을 조정하세요.")
